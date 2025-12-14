@@ -110,7 +110,7 @@ class HybridRecommender:
         # Weighted combination
         hybrid_score  = alpha * cf_scores + (1 - alpha) * cb_scores 
         # Sort and select top N
-        hybrid_score = hybrid_score.sort_values(ascending=False).head(n)
+        hybrid_score = hybrid_score.sort_values(ascending=False).drop_duplicates().head(n) # OPTIONAL: .drop_duplicates() 
         return hybrid_score
     
 class Evaluator:
