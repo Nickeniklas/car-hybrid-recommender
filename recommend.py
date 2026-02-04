@@ -168,8 +168,8 @@ class Evaluator:
 
 if __name__ == "__main__":
     # dataset paths
-    cars_data_path = "./data/df_cars_clean.csv"
-    ratings_data_path = "./data/df_ratings_clean.csv"
+    cars_data_path = "./data/cars_clean.csv"
+    ratings_data_path = "./data/ratings_clean.csv"
 
     # initialize hybrid recommender
     hybrid = HybridRecommender(cars_data_path, ratings_data_path)
