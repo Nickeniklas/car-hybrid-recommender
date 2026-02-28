@@ -79,10 +79,10 @@ class CollaborativeRecommender:
         return scores.sort_values(ascending=False).head(n)
 
 class HybridRecommender:
-    def __init__(self, cars_data_path, ratings_data_path):
+    def __init__(self, cars_data, ratings_data):
         # data
-        self.cars_data = pd.read_csv(cars_data_path)
-        self.ratings_data = pd.read_csv(ratings_data_path)
+        self.cars_data = cars_data
+        self.ratings_data = ratings_data
         # recommenders
         self.cb_model = ContentBasedRecommender(self.cars_data)
         self.cf_model = CollaborativeRecommender(self.ratings_data)
@@ -114,94 +114,110 @@ class HybridRecommender:
         return hybrid_score
     
 class Evaluator:
-    def __init__(self, recommender, cars_data_path, ratings_data_path, user_id):
-        self.recommender = recommender
-        self.cars_data = pd.read_csv(cars_data_path)
-        self.ratings_data = pd.read_csv(ratings_data_path)
-        self.user_actuals = self.ratings_data[self.ratings_data['userID'] == user_id]['carID'].tolist()
-        self.user_id = user_id
+    def __init__(self, cars_data, ratings_data):
+        # data
+        self.cars_df = cars_data
+        self.ratings_df = ratings_data
+        # Pre-calculate popularity for Novelty to save time
+        self.car_popularity = self.ratings_df['carID'].value_counts()
+        # Total user count for popularity fraction in Novelty 
+        self.total_users = self.ratings_df['userID'].nunique()
+
+    def precision_recall_at_k(self, actuals, recommended, k=10):
+        if not actuals or not recommended: return 0, 0
+        rec_k = recommended[:k]
+        hits = len(set(rec_k) & set(actuals))
+        
+        precision = hits / k
+        recall = hits / len(actuals)
+        return precision, recall
     
-    def precision_at_k(self, recs, k=10):
-        """ Proportion of relevant items that were recommended. """
-        if recs.empty or not self.user_actuals:
-            print("precision@k error: no recommendations")
-            return 0
-        rec_k = recs[:k]
-        relevant = len(set(rec_k.index) & set(self.user_actuals))
-        return relevant / len(self.user_actuals)
-    
-    def coverage_at_k(self, k=10):
+    def coverage_at_k(self, all_unique_recs):
         """ Catalog coverage of the recommendations. Fraction of unique cars recommended at least once."""
-        all_recs = self.get_all_recs(k) 
-        total_cars = self.cars_data['Make Model Year'].drop_duplicates()
-        return len(all_recs) / len(total_cars)
+        total_inventory = self.cars_df['carID'].nunique()
+        return len(all_unique_recs) / total_inventory
 
-    def novelty(self, k=10):
+    def novelty(self, all_unique_recs):
         """ Average novelty of the recommendations for all users. """
-        # all recommendations for all users
-        all_recs = self.get_all_recs(k)
-        # Popularity scores
-        car_popularity = self.ratings_data['carID'].value_counts()
-        total_users = self.ratings_data['userID'].nunique()
-        popularity_fraction = car_popularity / total_users
-
         novelty_scores = []
-        for car_id in all_recs:
-            # calculate novelty
-            p = popularity_fraction.get(car_id, 1 / (total_users + 1))
+        for car_id in all_unique_recs:
+            p = self.car_popularity.get(car_id, 1) / self.total_users
             novelty_scores.append(-np.log2(p))
-
-        return np.mean(novelty_scores) # average of all scores
+        return np.mean(novelty_scores) if novelty_scores else 0
     
-    def get_all_recs(self, k=10):
-        """ Get all unique car recommendations for all users. """
-        all_user_ids = self.ratings_data['userID'].drop_duplicates()
-        all_recs = set()  
+    def evaluate_all(self, prediction_dict, k=10):
+        """
+        Calculates average Precision and Recall across the batch.
+        """
+        precisions = []
+        recalls = []
+        all_unique_recs = set()
 
-        for user_id in all_user_ids:
-            recs = self.recommender.recommend(user_id=user_id, car=None, n=k) # car=None - only do CF
-            # if returned as series, convert index to list
-            if isinstance(recs, pd.Series):
-                recs = recs.index.tolist()
-            all_recs.update(recs)  # add unique recommendations
-        return all_recs
+        for uid, recs in prediction_dict.items():
+            actuals = self.ratings_df[self.ratings_df['userID'] == uid]['carID'].tolist()
+            precisions.append(self.precision_at_k(actuals, recs, k))
+            recalls.append(self.recall_at_k(actuals, recs, k))
+            all_unique_recs.update(recs)
+
+        return {
+            "avg_precision": np.mean(precisions),
+            "avg_recall": np.mean(recalls),
+            "coverage": len(all_unique_recs) / self.cars_df['carID'].nunique()
+        }
 
 if __name__ == "__main__":
-    # dataset paths
-    cars_data_path = "./data/cars_clean.csv"
-    ratings_data_path = "./data/ratings_clean.csv"
+    # load data
+    cars_data = pd.read_csv("./data/cars_clean.csv")
+    ratings_data = pd.read_csv("./data/ratings_clean.csv")
 
-    # initialize hybrid recommender
-    hybrid = HybridRecommender(cars_data_path, ratings_data_path)
-    hybrid.fit()
-
-    # test seeds
+    # test seed
     car = 'volkswagen passat 2.0 tdi sel 2012'
-    user_id = 27583
+
+    # initialize and fit recommender model
+    recommender = HybridRecommender(cars_data, ratings_data)
+    # Fit the model
+    recommender.fit()
+
+    evaluator = Evaluator(cars_data, ratings_data)
+
+    # Batch generation of recommendations for evaluation
+    test_users = ratings_data['userID'].unique()[:10] # Sample 50 users
+    prediction_dict = {}
+
+    avg_p, avg_r = [], []
+    all_recs_set = set()
+
+    print("Generating recommendations...")
+    for uid in test_users:
+        # Get ground truth
+        actuals = ratings_data[ratings_data['userID'] == uid]['carID'].tolist()
+        
+        # Get model output
+        # content based
+        cb_scores = recommender.cb_model.recommend(car)
+        print("Content-based recommendations:\n", recommender.id_to_title(cb_scores, 5))
+        # collaborative
+        cf_scores = recommender.cf_model.recommend(uid)
+        print("Collaborative recommendations:\n", recommender.id_to_title(cf_scores, 5))
+        # hybrid 
+        hybrid_scores = recommender.recommend(uid, car, n=10, alpha=0.5)
+        print("Hybrid recommendations:\n", recommender.id_to_title(hybrid_scores, 10))
+        rec_ids = hybrid_scores.index.tolist() if isinstance(hybrid_scores, pd.Series) else hybrid_scores
+        
+        # Store for batch metrics
+        prediction_dict[uid] = rec_ids
+        all_recs_set.update(rec_ids)
+        
+        # Calculate per-user metrics
+        p, r = evaluator.precision_recall_at_k(actuals, rec_ids, k=10)
+        avg_p.append(p)
+        avg_r.append(r)
+
+    # 3. Final Evaluation
+    print(f"--- Results ---")
+    print(f"Precision@10: {np.mean(avg_p):.4f}")
+    print(f"Recall@10:    {np.mean(avg_r):.4f}")
+    print(f"Coverage:     {evaluator.coverage_at_k(all_recs_set):.4f}")
+    print(f"Novelty:      {evaluator.novelty(all_recs_set):.4f}")
+
     
-    # content based
-    cb_scores = hybrid.cb_model.recommend(car)
-    print("Content-based recommendations:\n", hybrid.id_to_title(cb_scores, 5))
-
-    # collaborative
-    cf_scores = hybrid.cf_model.recommend(user_id)
-    print("Collaborative recommendations:\n", hybrid.id_to_title(cf_scores, 5))
-
-    # hybrid 
-    hybrid_scores = hybrid.recommend(user_id, car, n=10, alpha=0.5)
-    print("Hybrid recommendations:\n", hybrid.id_to_title(hybrid_scores, 10))
-
-    # Evaluation
-    eval = Evaluator(hybrid, cars_data_path, ratings_data_path, user_id)
-
-    # precision@k
-    prec_at_k = eval.precision_at_k(hybrid_scores, user_id)
-    print("Precision@k:\n", prec_at_k)
-
-    # coverage@k
-    cov_at_k = eval.coverage_at_k()
-    print("Coverage@k:\n", cov_at_k)
-
-    # novelty
-    novelty = eval.novelty()
-    print("Mean Novelty of all users:", novelty)
