@@ -3,7 +3,7 @@
 **A hybrid recommendation system for cars:**
 
 ### 3 Classes
-**ContentBasedRecommender**
+**CaseBasedRecommender**
 
 **CollaborativeRecommender**
 
@@ -24,10 +24,10 @@ Car reviews data (Edmunds car review): https://www.kaggle.com/datasets/shreemunp
 The car ratings dataset is aligned with the main cars dataset by creating a common carID for each car.
 
 ## Hybrid recommendation system 
-Content-Based → Collaborative
+Case-Based → Collaborative
 
-### 1) Content-based recommendations 
-Content-based filtering is implemented using TF–IDF vectorization and cosine similarity:
+### 1) Case-based recommendations 
+Case-based filtering is implemented using TF–IDF vectorization and cosine similarity:
 1. Fits TF-IDF vectors
 2. Calculates cosine similarity between cars.
 2. **Normalize** scores.
@@ -50,11 +50,11 @@ This allows the system to recommend cars a user is likely to like based on patte
 ### 3) Hybrid Recommendation
 The hybrid recommender combines:
 
-Content-based filtering (recommends similar cars based on features like make, model, drivetrain, and price)
+Case-based filtering 
 
-Collaborative filtering (recommends cars based on user behavior)
+Collaborative filtering 
 
-The final recommendation list merges content-based and CF recommendations while removing duplicates.
+The final recommendation list merges case-based and CF recommendations while removing duplicates.
 
 #### Merge formula
 **score-based weighted hybrid**
@@ -64,3 +64,11 @@ final_score=α×CF_score+(1−α)×CB_score
 where α (alpha) controls the balance between the two methods.
 
 ## Evaluation & tuning 
+
+Batch evaluation on many users:
+
+Metrics:
+- Precision @ k
+- Recall @ k
+- Coverage @ k
+- Novelty
