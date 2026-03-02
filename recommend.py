@@ -6,7 +6,7 @@ from sklearn.decomposition import NMF
 from sklearn.model_selection import train_test_split
 import math
 
-class CaseBasedRecommender:
+class ContentBasedRecommender:
     def __init__(self, cars_data):
         self.cars_data = cars_data
         self.tfidf_matrix = None
@@ -87,7 +87,7 @@ class HybridRecommender:
         self.cars_data = cars_data
         self.ratings_data = ratings_data
         # recommenders
-        self.cb_model = CaseBasedRecommender(self.cars_data)
+        self.cb_model = ContentBasedRecommender(self.cars_data)
         self.cf_model = CollaborativeRecommender(self.ratings_data)
 
     def fit(self):
@@ -104,8 +104,8 @@ class HybridRecommender:
         return merged
 
     def recommend(self, user_id, car, n=10, alpha=0.5):
-        """ Combine collaborative and case based predictions. """
-        # Get collaborative and case based predictions
+        """ Combine collaborative and content-based predictions. """
+        # Get collaborative and content-based predictions
         cf_scores = self.cf_model.recommend(user_id)
         cb_scores = self.cb_model.recommend(car)
         # Align indexes (fill missing with 0)
@@ -117,10 +117,10 @@ class HybridRecommender:
         return hybrid_score
     
 class Evaluator:
-    def __init__(self, cars_data, ratings_data, test_size=0.2):
+    def __init__(self, cars_data, test_ratings):
         # data
         self.cars_df = cars_data
-        self.ratings_df = ratings_data
+        self.ratings_df = test_ratings
 
         # Pre-calculate popularity for Novelty to save time
         self.car_popularity = self.ratings_df['carID'].value_counts()
@@ -203,9 +203,9 @@ if __name__ == "__main__":
         actuals = ratings_data[ratings_data['userID'] == uid]['carID'].tolist()
         
         # Get model output
-        # case based predictions 
+        # content-based predictions 
         cb_scores = recommender.cb_model.recommend(car)
-        print("Case-based predictions recommendations:\n", recommender.id_to_title(cb_scores, 5))
+        print("Content-based predictions recommendations:\n", recommender.id_to_title(cb_scores, 5))
         # collaborative
         cf_scores = recommender.cf_model.recommend(uid)
         print("Collaborative recommendations:\n", recommender.id_to_title(cf_scores, 5))
