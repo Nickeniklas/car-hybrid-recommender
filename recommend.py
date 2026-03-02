@@ -5,7 +5,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.decomposition import NMF
 import math
 
-class ContentBasedRecommender:
+class CaseBasedRecommender:
     def __init__(self, cars_data):
         self.cars_data = cars_data
         self.tfidf_matrix = None
@@ -84,7 +84,7 @@ class HybridRecommender:
         self.cars_data = cars_data
         self.ratings_data = ratings_data
         # recommenders
-        self.cb_model = ContentBasedRecommender(self.cars_data)
+        self.cb_model = CaseBasedRecommender(self.cars_data)
         self.cf_model = CollaborativeRecommender(self.ratings_data)
 
     def fit(self):
@@ -101,8 +101,8 @@ class HybridRecommender:
         return merged
 
     def recommend(self, user_id, car, n=10, alpha=0.5):
-        """ Combine collaborative and content-based predictions. """
-        # Get collaborative and content-based scores
+        """ Combine collaborative and case based predictions. """
+        # Get collaborative and case based predictions
         cf_scores = self.cf_model.recommend(user_id)
         cb_scores = self.cb_model.recommend(car)
         # Align indexes (fill missing with 0)
@@ -193,9 +193,9 @@ if __name__ == "__main__":
         actuals = ratings_data[ratings_data['userID'] == uid]['carID'].tolist()
         
         # Get model output
-        # content based
+        # case based predictions 
         cb_scores = recommender.cb_model.recommend(car)
-        print("Content-based recommendations:\n", recommender.id_to_title(cb_scores, 5))
+        print("Case-based predictions recommendations:\n", recommender.id_to_title(cb_scores, 5))
         # collaborative
         cf_scores = recommender.cf_model.recommend(uid)
         print("Collaborative recommendations:\n", recommender.id_to_title(cf_scores, 5))
