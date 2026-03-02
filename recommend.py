@@ -108,6 +108,9 @@ class HybridRecommender:
         # Get collaborative and content-based predictions
         cf_scores = self.cf_model.recommend(user_id)
         cb_scores = self.cb_model.recommend(car)
+        # 2. Force them to be numeric (Floats) immediately
+        cf_scores = pd.to_numeric(cf_scores, errors='coerce').fillna(0)
+        cb_scores = pd.to_numeric(cb_scores, errors='coerce').fillna(0)
         # Align indexes (fill missing with 0)
         cf_scores, cb_scores = cf_scores.align(cb_scores, fill_value=0)
         # Weighted combination
@@ -181,7 +184,7 @@ if __name__ == "__main__":
     train_ratings, test_ratings = train_test_split(ratings_data, test_size=0.2, random_state=42)
 
     # seed
-    car = 'volkswagen passat 2.0 tdi sel 2012'
+    car = 'subaru impreza 2019'
 
     # initialize and fit recommender model
     recommender = HybridRecommender(cars_data, train_ratings)
@@ -205,13 +208,13 @@ if __name__ == "__main__":
         # Get model output
         # content-based predictions 
         cb_scores = recommender.cb_model.recommend(car)
-        print("Content-based predictions recommendations:\n", recommender.id_to_title(cb_scores, 5))
+        #print("Content-based predictions recommendations:\n", recommender.id_to_title(cb_scores, 5))
         # collaborative
         cf_scores = recommender.cf_model.recommend(uid)
-        print("Collaborative recommendations:\n", recommender.id_to_title(cf_scores, 5))
+        #print("Collaborative recommendations:\n", recommender.id_to_title(cf_scores, 5))
         # hybrid 
         hybrid_scores = recommender.recommend(uid, car, n=10, alpha=0.5)
-        print("Hybrid recommendations:\n", recommender.id_to_title(hybrid_scores, 10))
+        #print("Hybrid recommendations:\n", recommender.id_to_title(hybrid_scores, 10))
         rec_ids = hybrid_scores.index.tolist() if isinstance(hybrid_scores, pd.Series) else hybrid_scores
         
         # Store for batch metrics
