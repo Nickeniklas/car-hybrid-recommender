@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.decomposition import NMF
+from sklearn.model_selection import train_test_split
 import math
 
 class CaseBasedRecommender:
@@ -26,6 +27,8 @@ class CaseBasedRecommender:
             car = make, model and year (small letter and space ex. toyota sienna 2020).
             n = amount of recommends.
         """
+        # Normalize input for matching
+        car = car.lower().strip()
         if car not in self.car_indices: return pd.Series([], dtype=float)
         value = self.car_indices[car]
         # Get row index of the car
@@ -114,23 +117,27 @@ class HybridRecommender:
         return hybrid_score
     
 class Evaluator:
-    def __init__(self, cars_data, ratings_data):
+    def __init__(self, cars_data, ratings_data, test_size=0.2):
         # data
         self.cars_df = cars_data
         self.ratings_df = ratings_data
+
         # Pre-calculate popularity for Novelty to save time
         self.car_popularity = self.ratings_df['carID'].value_counts()
         # Total user count for popularity fraction in Novelty 
         self.total_users = self.ratings_df['userID'].nunique()
 
-    def precision_recall_at_k(self, actuals, recommended, k=10):
-        if not actuals or not recommended: return 0, 0
+    def precision_at_k(self, actuals, recommended, k=10):
+        if not actuals or not recommended: return 0
         rec_k = recommended[:k]
         hits = len(set(rec_k) & set(actuals))
-        
-        precision = hits / k
-        recall = hits / len(actuals)
-        return precision, recall
+        return hits / k
+
+    def recall_at_k(self, actuals, recommended, k=10):
+        if not actuals or not recommended: return 0
+        rec_k = recommended[:k]
+        hits = len(set(rec_k) & set(actuals))
+        return hits / len(actuals)
     
     def coverage_at_k(self, all_unique_recs):
         """ Catalog coverage of the recommendations. Fraction of unique cars recommended at least once."""
@@ -170,15 +177,18 @@ if __name__ == "__main__":
     cars_data = pd.read_csv("./data/cars_clean.csv")
     ratings_data = pd.read_csv("./data/ratings_clean.csv")
 
-    # test seed
+    # 2. Split Data (Used for Novelty/Popularity calculations)
+    train_ratings, test_ratings = train_test_split(ratings_data, test_size=0.2, random_state=42)
+
+    # seed
     car = 'volkswagen passat 2.0 tdi sel 2012'
 
     # initialize and fit recommender model
-    recommender = HybridRecommender(cars_data, ratings_data)
+    recommender = HybridRecommender(cars_data, train_ratings)
     # Fit the model
     recommender.fit()
 
-    evaluator = Evaluator(cars_data, ratings_data)
+    evaluator = Evaluator(cars_data, test_ratings)
 
     # Batch generation of recommendations for evaluation
     test_users = ratings_data['userID'].unique()[:10] # Sample 50 users
@@ -209,7 +219,8 @@ if __name__ == "__main__":
         all_recs_set.update(rec_ids)
         
         # Calculate per-user metrics
-        p, r = evaluator.precision_recall_at_k(actuals, rec_ids, k=10)
+        p = evaluator.precision_at_k(actuals, rec_ids, k=10)
+        r = evaluator.recall_at_k(actuals, rec_ids, k=10)
         avg_p.append(p)
         avg_r.append(r)
 
